@@ -1,6 +1,7 @@
 import sqlite3
 import time
 import os
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
@@ -8,11 +9,16 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import StaleElementReferenceException, NoSuchElementException, ElementClickInterceptedException
 
 # --- Configuration ---
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'students.db')
 BASE_URL = "https://apps.knust.edu.gh/admissions/check/Home/Undergraduates"
-TARGET_PROGRAMME = "Computer Eng" # Matches 'Computer Eng.' and 'Computer Engineering' 
+
+# We search for "Computer" to be safe, then filter for "Computer Eng" in Python
+# This handles "BSc. Computer Eng", "Computer Engineering", etc.
+SEARCH_TERM = "Computer"  
+TARGET_KEYWORDS = ["COMPUTER ENG", "COMPUTER ENGINEERING"] 
 
 # --- Database Setup ---
 def init_db():
@@ -58,16 +64,24 @@ def save_student(app_id, name, programme, category):
     finally:
         conn.close()
 
+def is_target_programme(prog_text):
+    """Check if programme matches our target criteria."""
+    if not prog_text:
+        return False
+    prog_upper = prog_text.upper()
+    return any(keyword in prog_upper for keyword in TARGET_KEYWORDS)
+
 # --- Scraper Logic ---
 def run_scraper():
-    print("[*] Starting Scraper with Search Optimization...")
-    
+    print("[*] Starting Comprehensive Scraper...")
+    print(f"[*] Expecting at least 438 students.")
+
     chrome_options = Options()
+    # chrome_options.add_argument("--headless=new") # Run visible to debug if needed, or headless
     chrome_options.add_argument("--headless=new") 
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
-    # Suppress logging
     chrome_options.add_argument("--log-level=3")
 
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
@@ -77,7 +91,6 @@ def run_scraper():
         print(f"[*] Loaded {BASE_URL}")
         wait = WebDriverWait(driver, 20)
 
-        # Updated Selectors based on inspection
         category_ids = [
             "v-pills-international-applicants-tab",
             "v-pills-fee-paying-other-applicants-tab",
@@ -85,95 +98,168 @@ def run_scraper():
             "v-pills-wassce-applicants-tab",
             "v-pills-fee-paying-wassce-applicants-tab",
             "v-pills-less-endowed-applicants-tab",
-            "v-pills-nmtc-upgrade-tab"  # Added NMTC Upgrade
+            "v-pills-nmtc-upgrade-tab"
         ]
 
-        total_saved = 0
+        total_saved_session = 0
 
         for cat_id in category_ids:
+            print(f"\n{'='*50}")
+            print(f"[-] Processing Category: {cat_id}")
+            print(f"{'='*50}")
+
             try:
-                # 1. Click Category Tab
-                print(f"\n[-] Processing Category ID: {cat_id}")
+                # 1. Activate Tab
                 tab_element = wait.until(EC.element_to_be_clickable((By.ID, cat_id)))
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", tab_element)
+                time.sleep(1)
+                try:
+                    tab_element.click()
+                except ElementClickInterceptedException:
+                    driver.execute_script("arguments[0].click();", tab_element)
                 
-                # Scroll into view to avoid clicks being intercepted
-                driver.execute_script("arguments[0].scrollIntoView(true);", tab_element)
-                time.sleep(1) # Small pause for scroll stability
-                tab_element.click()
-                
-                # 2. Identify the active pane and its Search Box
-                # The panes use ID: cat_id minus '-tab'
+                # 2. Find Search Box for this pane
                 pane_id = cat_id.replace('-tab', '')
                 pane_selector = f"#{pane_id}"
                 
-                # Wait for pane to be visible
                 wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, pane_selector)))
-                
-                # Find the search box inside this pane's dataTables wrapper
-                # It's usually: input[type='search'] inside the wrapper. 
-                # We need to be careful to get the one for *this* table. 
-                # We can scope the search to the pane.
                 pane_element = driver.find_element(By.CSS_SELECTOR, pane_selector)
                 
-                # DataTables injects the control outside the table but often inside the wrapper inside the pane?
-                # Looking at DOM dump: <div id="DataTables_Table_0_filter" ...><input search></div>
-                # The ID increments (Table_0, Table_1...). 
-                # Safer to find input type='search' *visible* on page (since tabs hide others).
+                # Wait for table to be ready (look for input)
+                time.sleep(2)
                 
-                # Wait a moment for DataTables to initialize if it's lazy loaded
-                time.sleep(2) 
-                
-                search_box = pane_element.find_element(By.CSS_SELECTOR, "input[type='search']")
-                
-                # 3. Enter Filter: "Computer Engineering"
-                search_box.clear()
-                search_box.send_keys(TARGET_PROGRAMME)
-                print(f"    -> Filtered by '{TARGET_PROGRAMME}'")
-                
-                # Wait for filter to apply (Table rows update)
-                time.sleep(2) 
-                
-                # 4. Scrape Rows
-                # Find the table in this pane
+                # DataTables search input
+                # Usually: div.dataTables_filter input
                 try:
-                    table = pane_element.find_element(By.CSS_SELECTOR, "table.dataTable")
-                    rows = table.find_elements(By.TAG_NAME, "tr")
-                except:
-                    print("    [!] No table found in this pane.")
-                    continue
+                    search_box = pane_element.find_element(By.CSS_SELECTOR, "input[type='search']")
+                except NoSuchElementException:
+                    # Sometimes structure is slightly different or global
+                    # Try finding ANY search input visible
+                    inputs = pane_element.find_elements(By.TAG_NAME, "input")
+                    search_box = None
+                    for inp in inputs:
+                        if inp.get_attribute("type") == "search":
+                            search_box = inp
+                            break
+                    if not search_box:
+                        print(f"    [!] Could not find search box for {cat_id}")
+                        continue
 
-                count_in_cat = 0
-                for row in rows:
-                    cols = row.find_elements(By.TAG_NAME, "td")
-                    if len(cols) < 5:
-                        continue # Header or empty
-                    
-                    # Columns: #, ID, Name, Programme, Action
-                    app_id = cols[1].text.strip()
-                    name = cols[2].text.strip()
-                    prog = cols[3].text.strip()
-                    
-                    if TARGET_PROGRAMME.lower() in prog.lower():
-                        if save_student(app_id, name, prog, cat_id):
-                            count_in_cat += 1
-                            print(f"       + Saved: {name} ({app_id})")
+                # 3. Enter Broad Search Term
+                search_box.clear()
+                search_box.send_keys(SEARCH_TERM)
+                print(f"    -> Searching for '{SEARCH_TERM}'...")
                 
-                # Check for 'Next' button if we have many results (Optimization: Assuming <10 per cat with filter, but checking)
-                # If "No matching records found" is typically a row with colspan.
-                if count_in_cat == 0:
-                    print("    -> No students found.")
-                else:
-                    total_saved += count_in_cat
-                    
+                # Wait for filter to apply
+                time.sleep(3)
+
+                # 4. Pagination Loop
+                page_num = 1
+                cat_count = 0
+                
+                while True:
+                    # Scrape current page rows
+                    try:
+                        # Re-locate table to avoid stale elements
+                        updated_pane = driver.find_element(By.CSS_SELECTOR, pane_selector)
+                        table = updated_pane.find_element(By.CSS_SELECTOR, "table.dataTable")
+                        rows = table.find_elements(By.TAG_NAME, "tr")
+                    except Exception as e:
+                        print(f"    [!] Error locating table: {e}")
+                        break
+
+                    rows_scraped_on_page = 0
+                    for row in rows:
+                        try:
+                            cols = row.find_elements(By.TAG_NAME, "td")
+                            if len(cols) < 5:
+                                continue # Header or empty
+                            
+                            # Columns: #, ID, Name, Programme, Action
+                            app_id = cols[1].text.strip()
+                            name = cols[2].text.strip()
+                            prog = cols[3].text.strip()
+                            
+                            # Filter strictly for Computer Engineering
+                            if is_target_programme(prog):
+                                if save_student(app_id, name, prog, cat_id):
+                                    cat_count += 1
+                                    rows_scraped_on_page += 1
+                                    # Optional: print specific students or just progress
+                                    # print(f"       + Saved: {name} ({app_id})")
+                        except StaleElementReferenceException:
+                            continue # Skip row if stale
+
+                    # print(f"    -> Page {page_num}: Found {rows_scraped_on_page} relevant students")
+
+                    # Check for Next Button
+                    # Selector: .paginate_button.next
+                    # It must NOT have class 'disabled'
+                    try:
+                        # Need to find the pagination controls SPECIFIC to this pane
+                        # Usually follows the table
+                        # ID for wrapper often ends in _wrapper
+                        
+                        # Simpler: Find visible "Next" button inside this pane (or global if ID based)
+                        # DataTables IDs are dynamic (DataTables_Table_0_paginate)
+                        
+                        # Find the pagination container within the pane
+                        # Usually: .dataTables_paginate
+                        
+                        # Finding the "Next" button
+                        next_btn_candidates = updated_pane.find_elements(By.CSS_SELECTOR, ".paginate_button.next")
+                        
+                        next_btn = None
+                        for btn in next_btn_candidates:
+                            if btn.is_displayed():
+                                next_btn = btn
+                                break
+                        
+                        if not next_btn:
+                            # print("    [|] No Next button found (single page?)")
+                            break
+                        
+                        # Check if disabled
+                        classes = next_btn.get_attribute("class")
+                        if "disabled" in classes:
+                            # print("    [|] Next button disabled - Reached last page.")
+                            break
+                        
+                        # Click Next
+                        # print(f"    [>] Moving to Page {page_num + 1}...")
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_btn)
+                        time.sleep(0.5)
+                        next_btn.click()
+                        
+                        page_num += 1
+                        time.sleep(2) # Wait for page load
+                        
+                    except Exception as e:
+                        print(f"    [!] Pagination error: {e}")
+                        break
+
+                print(f"    [+] Category Complete. Total: {cat_count}")
+                total_saved_session += cat_count
+
             except Exception as e:
-                print(f"    [!] Error processing category {cat_id} or no search box: {e}")
+                print(f"    [!] Critical error in category {cat_id}: {e}")
 
         print("\n" + "="*30)
-        print(f"[*] Scrape Complete. Total Students Saved: {total_saved}")
+        print(f"[*] SCRAPE COMPLETE.")
+        print(f"[*] Total Students Found in this session: {total_saved_session}")
+        
+        # Verify Total DB Count
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM valid_students")
+        final_count = c.fetchone()[0]
+        print(f"[*] Total Database Count: {final_count}")
+        conn.close()
+        
         print("="*30)
 
     except Exception as e:
-        print(f"[!] Critical Error: {e}")
+        print(f"[!] Critical Driver Error: {e}")
     finally:
         driver.quit()
 
