@@ -2,7 +2,7 @@ services:
   - type: web
     name: aces-verification
     env: python
-    buildCommand: pip install -r requirements.txt && python scraper_module/scraper.py
+    buildCommand: pip install -r requirements.txt
     startCommand: cd web_app && gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: WHATSAPP_LINK_OFFICIAL

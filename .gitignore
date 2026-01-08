@@ -1,5 +1,5 @@
-# Database
-data/*.db
+# Database - NOT ignored, we include the pre-populated DB
+# data/*.db
 
 # Environment (SECRETS - DO NOT COMMIT)
 .env
