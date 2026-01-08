@@ -27,8 +27,8 @@ DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'stud
 
 # UPDATE THESE WITH YOUR ACTUAL GROUP NAMES
 GROUPS = [
-    "ACES Freshmen 2026 Official",      # Official Group Name
-    "ACES Freshmen 2026 Unofficial"     # Unofficial Group Name
+    "COE 1 {Official}",      # Official Group Name
+    "COE 1 {Unofficial}"     # Unofficial Group Name
 ]
 
 CHECK_INTERVAL = 60  # Seconds between checks
