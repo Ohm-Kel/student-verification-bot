@@ -1,15 +1,18 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_change_this_later'
+app.secret_key = os.getenv('SECRET_KEY', 'fallback_secret_key')
 
 # --- Config ---
-# Adjust path to point to the shared data directory
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'students.db')
-WHATSAPP_LINK_OFFICIAL = "https://chat.whatsapp.com/YOUR_OFFICIAL_GROUP_LINK_HERE"
-WHATSAPP_LINK_UNOFFICIAL = "https://chat.whatsapp.com/YOUR_UNOFFICIAL_GROUP_LINK_HERE"
+WHATSAPP_LINK_OFFICIAL = os.getenv('WHATSAPP_LINK_OFFICIAL', '')
+WHATSAPP_LINK_UNOFFICIAL = os.getenv('WHATSAPP_LINK_UNOFFICIAL', '')
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -33,20 +36,16 @@ def verify_student():
     conn.close()
     
     if student:
-        # Valid student found
-        # Store temporary info in session to safely pass to next step
         session['verified_app_id'] = student['app_id']
         session['verified_name'] = student['full_name']
         session['verified_prog'] = student['programme']
         return redirect(url_for('confirm_identity'))
     else:
-        # Invalid
         flash("Access Denied. ID not found in Computer Engineering admission list.", "error")
         return redirect(url_for('index'))
 
 @app.route('/confirm', methods=['GET', 'POST'])
 def confirm_identity():
-    # Security check: must have verified ID in session
     if 'verified_app_id' not in session:
         return redirect(url_for('index'))
     
@@ -55,13 +54,10 @@ def confirm_identity():
     if request.method == 'POST':
         phone = request.form.get('phone_number', '').strip()
         
-        # Basic Phone Validation (Ghana optimized but lenient)
-        # e.g. must start with +233 or 0, length > 9
         if len(phone) < 10:
              flash("Please enter a valid phone number.", "error")
              return render_template('confirm.html', name=name)
 
-        # Save to Whitelist
         app_id = session['verified_app_id']
         
         try:
@@ -71,10 +67,8 @@ def confirm_identity():
             conn.commit()
             conn.close()
             
-            # Clear session safety
             session.pop('verified_app_id', None)
             
-            # Success!
             return render_template('success.html', 
                                    whatsapp_link_official=WHATSAPP_LINK_OFFICIAL,
                                    whatsapp_link_unofficial=WHATSAPP_LINK_UNOFFICIAL)

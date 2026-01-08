@@ -4,3 +4,5 @@ beautifulsoup4
 selenium
 webdriver-manager
 pandas
+python-dotenv
+gunicorn
