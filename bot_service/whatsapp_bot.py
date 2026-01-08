@@ -302,22 +302,27 @@ def run_bot():
     print("=" * 50)
     print(f"[*] Monitoring groups: {GROUPS}")
     print(f"[*] Check interval: {CHECK_INTERVAL}s")
-    print("[*] Please scan the QR code to login.\n")
+    print("[*] Opening Chrome - please wait for QR code...\n")
 
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-infobars")
-    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--window-size=1200,800")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # Use a persistent profile to avoid re-scanning QR every time
-    user_data_dir = os.path.join(os.path.dirname(__file__), 'chrome_profile')
-    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
-
-    driver = webdriver.Chrome(
-        service=ChromeService(ChromeDriverManager().install()), 
-        options=chrome_options
-    )
+    print("[*] Launching Chrome...")
+    try:
+        driver = webdriver.Chrome(
+            service=ChromeService(ChromeDriverManager().install()), 
+            options=chrome_options
+        )
+    except Exception as e:
+        print(f"[!] Failed to start Chrome: {e}")
+        print("[!] Make sure Chrome browser is installed and up to date.")
+        return
     
     try:
         driver.get("https://web.whatsapp.com")
