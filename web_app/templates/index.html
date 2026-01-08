@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="glass-card rounded-2xl p-8 relative overflow-hidden">
+    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
+
+    <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+        <span>Admin Verification</span>
+    </h2>
+
+    <form action="/verify" method="POST" class="space-y-6">
+        <div>
+            <label class="block text-sm text-gray-400 mb-2">Application ID / Index Number</label>
+            <input type="text" name="app_id" required placeholder="e.g. 22305000"
+                class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500 transition-colors">
+        </div>
+
+        <button type="submit"
+            class="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-medium py-3 rounded-lg transition-all transform hover:scale-[1.02] shadow-lg shadow-green-900/20">
+            Verify Status
+        </button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+# Student Verification & WhatsApp Automated Entry System
+
+A Python-based system to verify Computer Engineering freshmen and automate their entry into official WhatsApp groups.
+
+## Features
+
+- **Web Scraper**: Fetches admission data from KNUST portal (Selenium-based)
+- **Verification Portal**: Premium Flask web interface for student verification
+- **WhatsApp Bot**: Auto-approves verified students joining the group
+
+## Tech Stack
+
+- Python 3.12+
+- Flask (Web Framework)
+- Selenium (Web Scraping & Automation)
+- SQLite (Database)
+- TailwindCSS (Frontend)
+
+## Quick Start
+
+### 1. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Run the Scraper
+```bash
+python scraper_module/scraper.py
+```
+
+### 3. Configure WhatsApp Links
+Edit `web_app/app.py` and update:
+```python
+WHATSAPP_LINK_OFFICIAL = "your_official_group_link"
+WHATSAPP_LINK_UNOFFICIAL = "your_unofficial_group_link"
+```
+
+### 4. Start the Web App
+```bash
+cd web_app
+flask run
+```
+
+### 5. Start the WhatsApp Bot
+```bash
+python bot_service/whatsapp_bot.py
+```
+
+## License
+
+MIT
