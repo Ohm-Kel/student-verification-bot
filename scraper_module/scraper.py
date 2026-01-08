@@ -84,7 +84,8 @@ def run_scraper():
             "v-pills-mature-applicants-tab",
             "v-pills-wassce-applicants-tab",
             "v-pills-fee-paying-wassce-applicants-tab",
-            "v-pills-less-endowed-applicants-tab"
+            "v-pills-less-endowed-applicants-tab",
+            "v-pills-nmtc-upgrade-tab"  # Added NMTC Upgrade
         ]
 
         total_saved = 0
