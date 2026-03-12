@@ -28,3 +28,6 @@ Thumbs.db
 # Selenium
 chromedriver.exe
 *.webp
+
+# Bot Data
+bot_service/chrome_profile/
